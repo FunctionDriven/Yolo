@@ -149,11 +149,19 @@
 
 <header>
     <h1>AVL Tree Visualizer</h1>
+    <form id="myForm" onsubmit="return handleFormSubmit(event)">
+        <label for="Inputs">Enter Inputs:</label>
+        <input type="text" id="Inputs" name="Inputs">
+        <br>
+        <label for="Addresses">Enter Addresses:</label>
+        <input type="text" id="Addresses" name="Addresses">
+        <button type="submit">Submit</button>
+    </form>
     <div id="controls">
         <button onclick="resetTree()" title="Rebuild the initial 13-node tree">Reset</button>
-        <button onclick="startScenario('A')">Scenario A</button>
+        <!-- <button onclick="startScenario('A')">Scenario A</button>
         <button onclick="startScenario('B')">Scenario B</button>
-        <button onclick="startScenario('C')">Scenario C</button>
+        <button onclick="startScenario('C')">Scenario C</button> -->
         <div style="width: 1px; height: 20px; background: #444; margin: 0 5px;"></div>
         <button onclick="undo()" id="btn-undo" disabled title="Undo last step">Undo</button>
         <button onclick="step()" id="btn-step">Next</button>
@@ -172,12 +180,37 @@
 
 <script>
     // --- Core Logic ---
-    const ADDRESS_MAP = {
-        1: '0x9b50', 2: '0x9b60', 3: '0x9b70', 4: '0x9b80', 5: '0x9b90',
-        6: '0x9ba0', 11: '0x9bb0', 13: '0x9bc0', 12: '0x9bd0', 10: '0x9be0',
-        9: '0x9bf0', 8: '0x9c00', 7: '0x9c10'
-    };
-    const INITIAL_INSERTION_ORDER = [1, 2, 3, 4, 5, 6, 11, 13, 12, 10, 9, 8, 7];
+
+    ADDRESS_MAP = {}
+    INITIAL_INSERTION_ORDER = []
+
+    function handleFormSubmit(event) {
+        event.preventDefault();
+
+        values_inputs_field = document.getElementById("Inputs")
+
+        if (values_inputs_field.value.includes(", ")) {
+            window.INITIAL_INSERTION_ORDER = values_inputs_field.value.split(", ")
+        }
+        else {
+            window.INITIAL_INSERTION_ORDER = values_inputs_field.value.split(" ")
+        }
+
+        addresses_inputs_field = document.getElementById("Addresses")
+        address_array = []
+        if (addresses_inputs_field.value.includes(", ")) {
+            address_array = addresses_inputs_field.value.split(", ")
+        }
+        else {
+            address_array = addresses_inputs_field.value.split(" ")
+        }
+
+        console.log(window.INITIAL_INSERTION_ORDER)
+        console.log(address_array)
+        for (let i = 0; i < window.INITIAL_INSERTION_ORDER.length; i++) {
+            ADDRESS_MAP[window.INITIAL_INSERTION_ORDER[i]] = address_array[i]
+        }
+    }
 
     class Node {
         constructor(value) {

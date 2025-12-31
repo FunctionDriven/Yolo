@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AVL Tree Visualizer</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --node-bg: #16213e;
+            --node-border: #0f3460;
+            --highlight: #e94560;
+            --text-color: #f1f1f1;
+            --address-color: #a8a8a8;
+            --anim-speed: 0.6s;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 15px 20px;
+            background-color: #16213e;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        h1 { margin: 0; font-size: 1.2rem; display: flex; align-items: center; gap: 10px; }
+
+        #controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        button {
+            background-color: var(--node-border);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        button:hover { background-color: var(--highlight); }
+        button:active { transform: scale(0.95); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        #container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #252a40 0%, #1a1a2e 100%);
+        }
+
+        #log-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 400px;
+            pointer-events: none;
+            backdrop-filter: blur(5px);
+            border-left: 4px solid var(--highlight);
+            z-index: 5;
+        }
+
+        #log-text { font-size: 0.95rem; line-height: 1.4; }
+        #log-title { font-weight: bold; margin-bottom: 5px; color: var(--highlight); text-transform: uppercase; font-size: 0.8rem; }
+
+        .node {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #2a2a40, #16213e);
+            border: 2px solid var(--highlight);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: white;
+            transition: left var(--anim-speed) cubic-bezier(0.25, 1, 0.5, 1), 
+                        top var(--anim-speed) cubic-bezier(0.25, 1, 0.5, 1), 
+                        opacity 0.3s, transform 0.3s;
+            z-index: 2;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            will-change: left, top;
+        }
+
+        .node-address {
+            position: absolute;
+            bottom: -20px;
+            font-size: 0.7rem;
+            color: var(--address-color);
+            background: rgba(0,0,0,0.6);
+            padding: 2px 4px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+
+        .node-bf {
+            position: absolute;
+            top: -15px;
+            right: -10px;
+            font-size: 0.7rem;
+            color: #4cd137;
+            font-weight: bold;
+        }
+
+        .node-bf.imbalance { color: #e1b12c; }
+        .node-bf.critical { color: #e84118; }
+
+        #lines-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        line {
+            stroke: rgba(255, 255, 255, 0.4);
+            stroke-width: 2;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>AVL Tree Visualizer</h1>
+    <div id="controls">
+        <button onclick="resetTree()" title="Rebuild the initial 13-node tree">Reset</button>
+        <button onclick="startScenario('A')">Scenario A</button>
+        <button onclick="startScenario('B')">Scenario B</button>
+        <button onclick="startScenario('C')">Scenario C</button>
+        <div style="width: 1px; height: 20px; background: #444; margin: 0 5px;"></div>
+        <button onclick="undo()" id="btn-undo" disabled title="Undo last step">Undo</button>
+        <button onclick="step()" id="btn-step">Next</button>
+        <button onclick="toggleAutoPlay()" id="btn-play">Auto Play</button>
+        <input type="range" id="speed-slider" min="1" max="100" value="50" style="width: 80px;" title="Animation Speed" oninput="updateSpeed()">
+    </div>
+</header>
+
+<div id="container">
+    <svg id="lines-svg"></svg>
+    <div id="log-panel">
+        <div id="log-title">Status</div>
+        <div id="log-text">Ready. Click 'Reset' or 'Auto Play' to build the initial tree.</div>
+    </div>
+</div>
+
+<script>
+    // --- Core Logic ---
+    const ADDRESS_MAP = {
+        1: '0x9b50', 2: '0x9b60', 3: '0x9b70', 4: '0x9b80', 5: '0x9b90',
+        6: '0x9ba0', 11: '0x9bb0', 13: '0x9bc0', 12: '0x9bd0', 10: '0x9be0',
+        9: '0x9bf0', 8: '0x9c00', 7: '0x9c10'
+    };
+    const INITIAL_INSERTION_ORDER = [1, 2, 3, 4, 5, 6, 11, 13, 12, 10, 9, 8, 7];
+
+    class Node {
+        constructor(value) {
+            this.value = value;
+            this.left = null; this.right = null;
+            this.height = 1; this.address = ADDRESS_MAP[value] || '0x????';
+            this.id = `node-${value}`;
+        }
+    }
+
+    class AVLTree {
+        constructor() { this.root = null; this.log = []; }
+        getHeight(node) { return node ? node.height : 0; }
+        getBalance(node) { return node ? this.getHeight(node.left) - this.getHeight(node.right) : 0; }
+        updateHeight(node) { node.height = 1 + Math.max(this.getHeight(node.left), this.getHeight(node.right)); }
+        
+        rotateRight(y) {
+            let x = y.left; let T2 = x.right;
+            x.right = y; y.left = T2;
+            this.updateHeight(y); this.updateHeight(x);
+            this.log.push(`Right Rot on ${y.value}`); return x;
+        }
+        rotateLeft(x) {
+            let y = x.right; let T2 = y.left;
+            y.left = x; x.right = T2;
+            this.updateHeight(x); this.updateHeight(y);
+            this.log.push(`Left Rot on ${x.value}`); return y;
+        }
+        insert(node, value) {
+            if (!node) return new Node(value);
+            if (value < node.value) node.left = this.insert(node.left, value);
+            else if (value > node.value) node.right = this.insert(node.right, value);
+            else return node;
+            this.updateHeight(node);
+            let bal = this.getBalance(node);
+            if (bal > 1 && value < node.left.value) return this.rotateRight(node);
+            if (bal < -1 && value > node.right.value) return this.rotateLeft(node);
+            if (bal > 1 && value > node.left.value) { node.left = this.rotateLeft(node.left); return this.rotateRight(node); }
+            if (bal < -1 && value < node.right.value) { node.right = this.rotateRight(node.right); return this.rotateLeft(node); }
+            return node;
+        }
+        minValueNode(node) { let c = node; while (c.left) c = c.left; return c; }
+        delete(node, value) {
+            if (!node) return node;
+            if (value < node.value) node.left = this.delete(node.left, value);
+            else if (value > node.value) node.right = this.delete(node.right, value);
+            else {
+                if ((!node.left) || (!node.right)) {
+                    let temp = node.left ? node.left : node.right;
+                    if (!temp) { temp = node; node = null; } else node = temp;
+                } else {
+                    let temp = this.minValueNode(node.right);
+                    node.value = temp.value; 
+                    node.right = this.delete(node.right, temp.value);
+                }
+            }
+            if (!node) return node;
+            this.updateHeight(node);
+            let bal = this.getBalance(node);
+            if (bal > 1 && this.getBalance(node.left) >= 0) return this.rotateRight(node);
+            if (bal > 1 && this.getBalance(node.left) < 0) { node.left = this.rotateLeft(node.left); return this.rotateRight(node); }
+            if (bal < -1 && this.getBalance(node.right) <= 0) return this.rotateLeft(node);
+            if (bal < -1 && this.getBalance(node.right) > 0) { node.right = this.rotateRight(node.right); return this.rotateLeft(node); }
+            return node;
+        }
+    }
+
+    let tree = new AVLTree();
+    let actionQueue = [];
+    let historyStack = [];
+    let isAutoPlaying = false;
+    let autoPlayTimeout = null;
+
+    function cloneTree(node) {
+        if (!node) return null;
+        let n = new Node(node.value);
+        n.height = node.height; n.address = node.address; n.id = node.id;
+        n.left = cloneTree(node.left); n.right = cloneTree(node.right);
+        return n;
+    }
+
+    function getTreeCoordinates(root) {
+        let coords = {}; if (!root) return coords;
+        const startX = window.innerWidth / 2;
+        const startY = 80; const Y_SPACING = 80;
+        function traverse(node, level, offset, parentX) {
+            if (!node) return;
+            let gap = 300 / Math.pow(1.8, level); 
+            let x = parentX === null ? startX : parentX + offset * gap;
+            let y = startY + level * Y_SPACING;
+            coords[node.value] = { x, y, node };
+            traverse(node.left, level + 1, -1, x);
+            traverse(node.right, level + 1, 1, x);
+        }
+        traverse(root, 0, 0, null);
+        return coords;
+    }
+
+    function render() {
+        const coords = getTreeCoordinates(tree.root);
+        const container = document.getElementById('container');
+        const svg = document.getElementById('lines-svg');
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        const existingNodes = document.querySelectorAll('.node');
+        const activeIds = new Set();
+        for (let val in coords) {
+            const { x, y, node } = coords[val];
+            const id = `node-${val}`; activeIds.add(id);
+            let el = document.getElementById(id);
+            if (!el) {
+                el = document.createElement('div'); el.id = id; el.className = 'node';
+                el.innerHTML = `${val}<div class="node-address">${node.address}</div><div class="node-bf">${tree.getBalance(node)}</div>`;
+                el.style.left = `${x - 25}px`; el.style.top = `${y - 25}px`;
+                container.appendChild(el);
+            } else {
+                el.style.left = `${x - 25}px`; el.style.top = `${y - 25}px`;
+                const bf = tree.getBalance(node); const bfEl = el.querySelector('.node-bf');
+                bfEl.textContent = (bf > 0 ? '+' : '') + bf;
+                bfEl.className = `node-bf ${Math.abs(bf) > 1 ? 'critical' : (Math.abs(bf) === 1 ? 'imbalance' : '')}`;
+            }
+            if (node.left) drawLine(id, `node-${node.left.value}`, svg);
+            if (node.right) drawLine(id, `node-${node.right.value}`, svg);
+        }
+        existingNodes.forEach(el => {
+            if (!activeIds.has(el.id)) {
+                el.style.opacity = '0'; el.style.transform = 'scale(0)';
+                setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+            }
+        });
+    }
+
+    function drawLine(id1, id2, svg) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('data-from', id1); line.setAttribute('data-to', id2);
+        svg.appendChild(line);
+    }
+
+    function animateLines() {
+        const lines = document.querySelectorAll('#lines-svg line');
+        lines.forEach(line => {
+            const fromId = line.getAttribute('data-from'); const toId = line.getAttribute('data-to');
+            const el1 = document.getElementById(fromId); const el2 = document.getElementById(toId);
+            if (el1 && el2) {
+                line.setAttribute('x1', el1.offsetLeft + 25); line.setAttribute('y1', el1.offsetTop + 25);
+                line.setAttribute('x2', el2.offsetLeft + 25); line.setAttribute('y2', el2.offsetTop + 25);
+            }
+        });
+        requestAnimationFrame(animateLines);
+    }
+    animateLines();
+
+    function log(msg) { document.getElementById('log-text').innerHTML = msg; }
+    function queueAction(action, description) { actionQueue.push({ action, description }); updateButtons(); }
+    function updateButtons() {
+        document.getElementById('btn-step').disabled = actionQueue.length === 0;
+        document.getElementById('btn-play').textContent = isAutoPlaying ? "Stop" : "Auto Play";
+        document.getElementById('btn-undo').disabled = historyStack.length === 0;
+    }
+
+    function step() {
+        if (actionQueue.length === 0) {
+            if (isAutoPlaying) { isAutoPlaying = false; clearTimeout(autoPlayTimeout); }
+            updateButtons(); return;
+        }
+        const item = actionQueue.shift();
+        historyStack.push({ root: cloneTree(tree.root), item: item });
+        tree.log = []; log(item.description); item.action();
+        if (tree.log.length > 0) log(`${item.description}<br><span style="color:#e94560;">${tree.log.join(', ')}</span>`);
+        render(); updateButtons();
+    }
+
+    function updateSpeed() {
+        const slider = document.getElementById('speed-slider');
+        const val = parseInt(slider.value, 10);
+        const ms = 2000 - ((val - 1) * (1900 / 99));
+        document.documentElement.style.setProperty('--anim-speed', `${Math.max(0.1, ms / 1000 * 0.9)}s`);
+        return ms;
+    }
+
+    function processAutoPlay() {
+        if (!isAutoPlaying) return;
+        step();
+        if (actionQueue.length > 0) autoPlayTimeout = setTimeout(processAutoPlay, Math.max(100, updateSpeed()));
+        else { isAutoPlaying = false; updateButtons(); }
+    }
+
+    function undo() {
+        if (historyStack.length === 0) return;
+        if (isAutoPlaying) { isAutoPlaying = false; clearTimeout(autoPlayTimeout); }
+        const lastState = historyStack.pop();
+        tree.root = lastState.root; actionQueue.unshift(lastState.item);
+        log(`Undid: ${lastState.item.description}`); render(); updateButtons();
+    }
+
+    function toggleAutoPlay() {
+        if (isAutoPlaying) { isAutoPlaying = false; clearTimeout(autoPlayTimeout); updateButtons(); }
+        else { if (actionQueue.length === 0) return; isAutoPlaying = true; updateButtons(); processAutoPlay(); }
+    }
+
+    function resetTree() {
+        isAutoPlaying = false; clearTimeout(autoPlayTimeout);
+        actionQueue = []; historyStack = []; tree = new AVLTree(); render(); 
+        log("Rebuilding tree...");
+        INITIAL_INSERTION_ORDER.forEach(val => {
+            queueAction(() => { tree.root = tree.insert(tree.root, val); }, `Inserting ${val}`);
+        });
+        updateButtons(); updateSpeed();
+        log("Initial sequence queued. Click <b>Auto Play</b> to see the tree build.");
+    }
+
+    function startScenario(type) {
+        tree = new AVLTree(); INITIAL_INSERTION_ORDER.forEach(val => tree.root = tree.insert(tree.root, val));
+        render(); actionQueue = []; historyStack = []; isAutoPlaying = false; clearTimeout(autoPlayTimeout);
+        if (type === 'A') [10, 9, 7, 8].forEach(v => queueAction(() => tree.root = tree.delete(tree.root, v), `Delete ${v}`));
+        else if (type === 'B') queueAction(() => tree.root = tree.delete(tree.root, 13), "Delete 13");
+        else if (type === 'C') [1, 5].forEach(v => queueAction(() => tree.root = tree.delete(tree.root, v), `Delete ${v}`));
+        updateButtons();
+    }
+
+    resetTree();
+    window.addEventListener('resize', render);
+</script>
+</body>
+</html>
